@@ -1,5 +1,7 @@
 # Navigation standard
 
-Use the shared asset: https://skunkworksacademy.com/assets/academy-navigation.js?v=2026.07.04
+Canonical Academy shell: https://skunkworksacademy.com/assets/academy-navigation.js?v=2026.08.15.2
 
-No separate public top menu.
+Public pages must load the shared Skunkworks Academy global navigation and footer exactly once and must not maintain a separate public top menu, burger menu, or footer.
+
+Current shell version: `2026.08.15.2`
