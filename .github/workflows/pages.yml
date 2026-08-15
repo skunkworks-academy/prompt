@@ -1,0 +1,82 @@
+name: Deploy Prompt site
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: prompt-pages
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate public entry point and canonical shell
+        run: |
+          test -f index.html
+          test "$(tr -d '\r\n' < CNAME)" = "prompt.skunkworksacademy.com"
+          grep -q 'academy-navigation.js?v=2026.08.15.2' index.html
+          grep -q 'data-skunkworks-global-shell="2026.08.15.2"' index.html
+          grep -q '<main' index.html
+          grep -q '<title>Prompt | Skunkworks Academy</title>' index.html
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce canonical Academy shell on published HTML
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          current = 'https://skunkworksacademy.com/assets/academy-navigation.js?v=2026.08.15.2'
+          marker = 'data-skunkworks-global-shell="2026.08.15.2"'
+          pages = [p for p in Path('.').rglob('*.html') if '.git' not in p.parts]
+          if not pages:
+              raise SystemExit('No publishable HTML pages found')
+          missing = []
+          for path in pages:
+              html = path.read_text(encoding='utf-8', errors='ignore')
+              if current not in html or marker not in html:
+                  missing.append(str(path))
+          if missing:
+              raise SystemExit('Canonical Academy shell missing from: ' + ', '.join(missing))
+          print(f'Verified canonical shell on {len(pages)} HTML page(s).')
+          PY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  verify-production:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify prompt production domain
+        run: |
+          for attempt in {1..30}; do
+            response="$(curl --location --fail --silent --show-error --max-time 20 https://prompt.skunkworksacademy.com/ || true)"
+            if printf '%s' "$response" | grep -q '<title>Prompt | Skunkworks Academy</title>' && printf '%s' "$response" | grep -q 'academy-navigation.js?v=2026.08.15.2'; then
+              echo 'Prompt production verification succeeded.'
+              exit 0
+            fi
+            sleep 10
+          done
+          echo 'Prompt production verification failed.'
+          exit 1
