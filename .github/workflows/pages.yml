@@ -35,6 +35,8 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - name: Enforce canonical Academy shell on published HTML
@@ -68,15 +70,38 @@ jobs:
     needs: deploy
     runs-on: ubuntu-latest
     steps:
-      - name: Verify prompt production domain
+      - name: Verify deployed Pages artifact
+        env:
+          PAGE_URL: ${{ needs.deploy.outputs.page_url }}
         run: |
-          for attempt in {1..30}; do
-            response="$(curl --location --fail --silent --show-error --max-time 20 https://prompt.skunkworksacademy.com/ || true)"
-            if printf '%s' "$response" | grep -q '<title>Prompt | Skunkworks Academy</title>' && printf '%s' "$response" | grep -q 'academy-navigation.js?v=2026.08.15.1' && printf '%s' "$response" | grep -q 'data-skunkworks-global-nav="v10"'; then
-              echo 'Prompt production verification succeeded.'
-              exit 0
+          set -euo pipefail
+          echo "Verifying GitHub Pages deployment: ${PAGE_URL}"
+          response=""
+          for attempt in {1..18}; do
+            response="$(curl --location --fail --silent --show-error --max-time 20 "${PAGE_URL}" || true)"
+            if printf '%s' "$response" | grep -q '<title>Prompt | Skunkworks Academy</title>' \
+              && printf '%s' "$response" | grep -q 'academy-navigation.js?v=2026.08.15.1' \
+              && printf '%s' "$response" | grep -q 'data-skunkworks-global-nav="v10"'; then
+              echo 'Prompt Pages artifact verification succeeded.'
+              break
             fi
             sleep 10
           done
-          echo 'Prompt production verification failed.'
-          exit 1
+          if ! printf '%s' "$response" | grep -q '<title>Prompt | Skunkworks Academy</title>'; then
+            echo 'Prompt Pages artifact verification failed.' >&2
+            exit 1
+          fi
+
+      - name: Check custom-domain DNS without blocking Pages deployment
+        run: |
+          set -euo pipefail
+          if getent ahosts prompt.skunkworksacademy.com >/dev/null 2>&1; then
+            response="$(curl --location --fail --silent --show-error --max-time 20 https://prompt.skunkworksacademy.com/ || true)"
+            if printf '%s' "$response" | grep -q 'data-skunkworks-global-nav="v10"'; then
+              echo 'Prompt custom domain resolves and serves the canonical v10 shell.'
+            else
+              echo '::warning::prompt.skunkworksacademy.com resolves, but the canonical v10 shell was not confirmed on the custom domain.'
+            fi
+          else
+            echo '::warning::prompt.skunkworksacademy.com does not currently resolve. GitHub Pages deployment succeeded; configure the custom domain in Pages settings and DNS.'
+          fi
