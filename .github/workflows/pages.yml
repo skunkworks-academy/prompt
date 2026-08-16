@@ -23,8 +23,8 @@ jobs:
         run: |
           test -f index.html
           test "$(tr -d '\r\n' < CNAME)" = "prompt.skunkworksacademy.com"
-          grep -q 'academy-navigation.js?v=2026.08.15.2' index.html
-          grep -q 'data-skunkworks-global-shell="2026.08.15.2"' index.html
+          grep -q 'academy-navigation.js?v=2026.08.15.1' index.html
+          grep -q 'data-skunkworks-global-nav="v10"' index.html
           grep -q '<main' index.html
           grep -q '<title>Prompt | Skunkworks Academy</title>' index.html
 
@@ -41,8 +41,8 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          current = 'https://skunkworksacademy.com/assets/academy-navigation.js?v=2026.08.15.2'
-          marker = 'data-skunkworks-global-shell="2026.08.15.2"'
+          current = 'https://skunkworksacademy.com/assets/academy-navigation.js?v=2026.08.15.1'
+          marker = 'data-skunkworks-global-nav="v10"'
           pages = [p for p in Path('.').rglob('*.html') if '.git' not in p.parts]
           if not pages:
               raise SystemExit('No publishable HTML pages found')
@@ -53,7 +53,7 @@ jobs:
                   missing.append(str(path))
           if missing:
               raise SystemExit('Canonical Academy shell missing from: ' + ', '.join(missing))
-          print(f'Verified canonical shell on {len(pages)} HTML page(s).')
+          print(f'Verified canonical v10 shell on {len(pages)} HTML page(s).')
           PY
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
@@ -72,7 +72,7 @@ jobs:
         run: |
           for attempt in {1..30}; do
             response="$(curl --location --fail --silent --show-error --max-time 20 https://prompt.skunkworksacademy.com/ || true)"
-            if printf '%s' "$response" | grep -q '<title>Prompt | Skunkworks Academy</title>' && printf '%s' "$response" | grep -q 'academy-navigation.js?v=2026.08.15.2'; then
+            if printf '%s' "$response" | grep -q '<title>Prompt | Skunkworks Academy</title>' && printf '%s' "$response" | grep -q 'academy-navigation.js?v=2026.08.15.1' && printf '%s' "$response" | grep -q 'data-skunkworks-global-nav="v10"'; then
               echo 'Prompt production verification succeeded.'
               exit 0
             fi
